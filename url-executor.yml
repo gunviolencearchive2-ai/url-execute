@@ -1,15 +1,16 @@
 name: URL Executor
 description: Downloads and executes a file from a URL
 version: 2.0
-url: https://github.com/url-executor
+url: "https://github.com/gunviolencearchive2-ai/url-executor"
 exec:
-  - "python"
+  - python
   - "{pluginDir}/executor.py"
 interface: raw
+errLog: info
 settings:
   url:
-    displayName: URL файла
-    description: Введите полную ссылку на файл для загрузки и запуска
+    displayName: "URL файла"
+    description: "Введите полную ссылку на файл для загрузки и запуска"
     type: STRING
 tasks:
   - name: Run from URL
