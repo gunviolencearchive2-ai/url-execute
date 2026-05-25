@@ -1,8 +1,0 @@
-- id: url_executor
-  name: URL Executor
-  metadata:
-    description: Downloads and executes a file from a URL directly from Stash
-  version: 2.0.0
-  date: 2026-05-25
-  path: url-executor.zip
-  sha256: 76a50b78cd9a8ea0c07eadf647dc41363b87d94e58826a09c06a89825bd8d31c
