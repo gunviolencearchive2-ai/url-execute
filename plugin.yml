@@ -12,3 +12,7 @@ settings:
     displayName: "URL файла"
     description: "Введите полную ссылку на файл для загрузки и запуска"
     type: STRING
+operations:
+  - name: run_url_executor
+    displayName: Run from URL
+    description: Downloads and executes a file from the configured URL
