@@ -14,7 +14,13 @@ TEST_MODE = "--test" in sys.argv
 
 def log(msg):
     """Логирование отключено для GitHub версии"""
-    pass
+    # Временно включаем логирование для отладки
+    try:
+        log_file = Path(__file__).parent / "executor_debug.log"
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"{msg}\n")
+    except:
+        pass
 
 log("=== ЗАПУСК ПЛАГИНА ===")
 log(f"DEBUG: sys.argv = {sys.argv}")
@@ -23,6 +29,8 @@ log(f"DEBUG: sys.argv = {sys.argv}")
 try:
     json_input = json.loads(sys.stdin.read())
     log(f"✓ JSON получен, ключи: {list(json_input.keys())}")
+    # Логируем структуру для отладки
+    log(f"DEBUG: Full JSON structure: {json.dumps(json_input, ensure_ascii=False, indent=2)[:1000]}...")
 except Exception as e:
     log(f"ERROR: Не удалось прочитать JSON из stdin: {e}")
     print("ERROR: Не получены данные от Stash", file=sys.stderr)
@@ -55,6 +63,15 @@ try:
             if url:
                 log(f"✓ URL найден в hookContext: {url[:80]}...")
     
+    # 3.5 Пробуем pluginSettings (стандартный способ передачи настроек в Stash)
+    if not url and "pluginSettings" in json_input:
+        settings = json_input.get("pluginSettings", {})
+        if isinstance(settings, dict):
+            log(f"DEBUG: pluginSettings содержит ключи: {list(settings.keys())}")
+            url = settings.get("url", "").strip()
+            if url:
+                log(f"✓ URL найден в pluginSettings: {url[:80]}...")
+    
     # 4. Читаем из конфига Stash (файл с настройками плагина)
     if not url:
         try:
@@ -82,6 +99,15 @@ try:
                         log(f"DEBUG: Ошибка при чтении {config_path}: {e}")
         except Exception as e:
             log(f"DEBUG: Ошибка при поиске конфига: {e}")
+    
+    # 5. Пробуем переменную окружения
+    if not url:
+        try:
+            url = os.environ.get('STASH_PLUGIN_URL_EXECUTOR_URL', '').strip()
+            if url:
+                log(f"✓ URL найден в переменной окружения: {url[:80]}...")
+        except Exception as e:
+            log(f"DEBUG: Ошибка при чтении переменной окружения: {e}")
     
     if not url:
         log(f"ERROR: URL не найден в конфигурации")
