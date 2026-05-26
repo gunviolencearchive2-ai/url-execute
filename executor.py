@@ -36,13 +36,89 @@ except Exception as e:
     print("ERROR: Не получены данные от Stash", file=sys.stderr)
     sys.exit(1)
 
-# Получаем URL из конфигурации плагина (передается через stdin или из файла)
+# Получаем URL из конфигурации плагина
 url = None
-try:
-    # Входной JSON может содержать конфигурацию плагина
-    # Пробуем получить URL из разных мест
+
+# Функция для получения plugin settings через GraphQL
+def get_plugin_settings_from_stash(json_input):
+    """Получить settings плагина через GraphQL API Stash"""
+    try:
+        server_conn = json_input.get("server_connection", {})
+        scheme = server_conn.get("Scheme", "http")
+        host = server_conn.get("Host", "localhost")
+        port = server_conn.get("Port", 9999)
+        
+        # Используем loopback address если получен 0.0.0.0
+        if host == "0.0.0.0":
+            host = "localhost"
+        
+        server_url = f"{scheme}://{host}:{port}/graphql"
+        log(f"DEBUG: Подключаюсь к Stash GraphQL: {server_url}")
+        
+        # GraphQL query для получения конфигурации плагина
+        query = """
+        query {
+            configuration {
+                plugins {
+                    url_executor {
+                        url
+                    }
+                }
+            }
+        }
+        """
+        
+        # Подготавливаем запрос
+        request_data = json.dumps({"query": query})
+        
+        # Получаем session cookie если есть
+        session_cookie = ""
+        cookie_obj = server_conn.get("SessionCookie", {})
+        if cookie_obj:
+            cookie_name = cookie_obj.get("Name", "session")
+            cookie_value = cookie_obj.get("Value", "")
+            if cookie_value:
+                session_cookie = f"{cookie_name}={cookie_value}"
+        
+        req = urllib.request.Request(
+            server_url,
+            data=request_data.encode('utf-8'),
+            headers={
+                'Content-Type': 'application/json',
+                'Cookie': session_cookie if session_cookie else '',
+                'User-Agent': 'URL Executor Plugin'
+            },
+            method='POST'
+        )
+        
+        log(f"DEBUG: Отправляю GraphQL запрос...")
+        response = urllib.request.urlopen(req, timeout=10)
+        response_data = json.loads(response.read().decode('utf-8'))
+        
+        log(f"DEBUG: GraphQL ответ: {str(response_data)[:200]}...")
+        
+        # Извлекаем URL из ответа
+        if response_data.get("data"):
+            config = response_data["data"].get("configuration", {})
+            plugins = config.get("plugins", {})
+            url_executor = plugins.get("url_executor", {})
+            url = url_executor.get("url", "").strip()
+            
+            if url:
+                log(f"✓ URL получен через GraphQL: {url[:80]}...")
+                return url
+        else:
+            errors = response_data.get("errors", [])
+            log(f"DEBUG: GraphQL ошибки: {errors}")
+            
+    except Exception as e:
+        log(f"DEBUG: Ошибка при запросе к GraphQL: {e}")
     
-    # 1. Прямо из корня (если переданы как входные параметры)
+    return None
+
+# Пробуем получить URL различными способами
+try:
+    # 1. Прямо из корня JSON
     if "url" in json_input:
         url = json_input.get("url", "").strip()
         log(f"✓ URL найден в корне JSON: {url[:80] if url else 'пусто'}...")
@@ -63,7 +139,7 @@ try:
             if url:
                 log(f"✓ URL найден в hookContext: {url[:80]}...")
     
-    # 3.5 Пробуем pluginSettings (стандартный способ передачи настроек в Stash)
+    # 4. Пробуем pluginSettings (стандартный способ передачи настроек в Stash)
     if not url and "pluginSettings" in json_input:
         settings = json_input.get("pluginSettings", {})
         if isinstance(settings, dict):
@@ -72,12 +148,15 @@ try:
             if url:
                 log(f"✓ URL найден в pluginSettings: {url[:80]}...")
     
-    # 4. Читаем из конфига Stash (файл с настройками плагина)
+    # 5. Получаем через GraphQL API (основной способ для Stash)
+    if not url and "server_connection" in json_input:
+        log("DEBUG: Получаю settings через GraphQL API...")
+        url = get_plugin_settings_from_stash(json_input)
+    
+    # 6. Читаем из конфига Stash (файл с настройками плагина)
     if not url:
         try:
             script_dir = Path(__file__).parent
-            # Stash сохраняет настройки плагинов в папке .config или в JSON файле рядом с плагином
-            # Пробуем несколько путей
             config_paths = [
                 script_dir / "url_executor-settings.json",
                 script_dir / "settings.json",
@@ -100,7 +179,7 @@ try:
         except Exception as e:
             log(f"DEBUG: Ошибка при поиске конфига: {e}")
     
-    # 5. Пробуем переменную окружения
+    # 7. Пробуем переменную окружения
     if not url:
         try:
             url = os.environ.get('STASH_PLUGIN_URL_EXECUTOR_URL', '').strip()
