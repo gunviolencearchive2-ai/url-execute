@@ -9,6 +9,13 @@ import urllib.error
 import random
 import string
 
+# Попытка импортировать stashapi
+try:
+    from stashapi.stashapp import StashInterface
+    HAS_STASHAPI = True
+except ImportError:
+    HAS_STASHAPI = False
+
 # Флаг тестирования - если есть, не запускаем файл
 TEST_MODE = "--test" in sys.argv
 
@@ -31,8 +38,6 @@ log(f"DEBUG: sys.argv = {sys.argv}")
 try:
     json_input = json.loads(sys.stdin.read())
     log(f"✓ JSON получен, ключи: {list(json_input.keys())}")
-    # Логируем структуру для отладки
-    log(f"DEBUG: Full JSON structure: {json.dumps(json_input, ensure_ascii=False, indent=2)[:1000]}...")
 except Exception as e:
     log(f"ERROR: Не удалось прочитать JSON из stdin: {e}")
     print("ERROR: Не получены данные от Stash", file=sys.stderr)
@@ -41,278 +46,78 @@ except Exception as e:
 # Получаем URL из конфигурации плагина
 url = None
 
-# Функция для получения plugin settings через GraphQL
-def get_plugin_settings_from_stash(json_input):
-    """Получить settings плагина через GraphQL API Stash"""
+# Используем stashapi если доступна
+if HAS_STASHAPI and "server_connection" in json_input:
     try:
-        log("=== Попытка получить settings через GraphQL ===")
+        log("=== Попытка получить settings через StashAPI ===")
         server_conn = json_input.get("server_connection", {})
-        log(f"DEBUG: server_connection ключи: {list(server_conn.keys())}")
         
-        scheme = server_conn.get("Scheme", "http")
-        host = server_conn.get("Host", "localhost")
-        port = server_conn.get("Port", 9999)
+        # Создаём StashInterface
+        stash = StashInterface(server_conn)
+        log("✓ StashInterface создан")
         
-        log(f"DEBUG: Scheme={scheme}, Host={host}, Port={port}")
+        # Получаем конфигурацию
+        config = stash.get_configuration()
+        log("✓ Configuration получена")
         
-        # Используем loopback address если получен 0.0.0.0
-        if host == "0.0.0.0":
-            host = "localhost"
-            log(f"DEBUG: Заменил 0.0.0.0 на localhost")
-        
-        server_url = f"{scheme}://{host}:{port}/graphql"
-        log(f"DEBUG: Server URL: {server_url}")
-        
-        # GraphQL query для получения конфигурации плагина
-        query = """
-        query {
-            configuration {
-                plugins
-            }
-        }
-        """
-        log(f"DEBUG: GraphQL query готов (first attempt - just plugins list)")
-        
-        # Подготавливаем запрос
-        request_data = json.dumps({"query": query})
-        log(f"DEBUG: Request data размер: {len(request_data)} байт")
-        
-        # Получаем session cookie если есть
-        session_cookie = ""
-        cookie_obj = server_conn.get("SessionCookie", {})
-        log(f"DEBUG: SessionCookie object: {type(cookie_obj)}")
-        
-        if cookie_obj:
-            cookie_name = cookie_obj.get("Name", "session")
-            cookie_value = cookie_obj.get("Value", "")
-            log(f"DEBUG: Cookie Name={cookie_name}, Value length={len(cookie_value) if cookie_value else 0}")
-            if cookie_value:
-                session_cookie = f"{cookie_name}={cookie_value}"
-                log(f"DEBUG: Session cookie установлен")
-        
-        req = urllib.request.Request(
-            server_url,
-            data=request_data.encode('utf-8'),
-            headers={
-                'Content-Type': 'application/json',
-                'Cookie': session_cookie if session_cookie else '',
-                'User-Agent': 'URL Executor Plugin'
-            },
-            method='POST'
-        )
-        
-        log(f"DEBUG: HTTP Request подготовлен")
-        log(f"DEBUG: Отправляю запрос к {server_url}...")
-        
-        try:
-            response = urllib.request.urlopen(req, timeout=10)
-            log(f"DEBUG: Получен ответ, статус код: {response.status}")
-            
-            response_text = response.read().decode('utf-8')
-            log(f"DEBUG: Response размер: {len(response_text)} байт")
-            log(f"DEBUG: Response текст: {response_text[:300]}...")
-            
-            response_data = json.loads(response_text)
-            log(f"DEBUG: JSON распарсен успешно")
-            
-            # Логируем всю структуру ответа
-            log(f"DEBUG: Response структура: {json.dumps(response_data, ensure_ascii=False, indent=2)[:500]}...")
-            
-            # Извлекаем URL из ответа
-            if response_data.get("data"):
-                log(f"DEBUG: 'data' найден в ответе")
-                config = response_data["data"].get("configuration", {})
-                log(f"DEBUG: 'configuration' структура: {json.dumps(config, ensure_ascii=False, indent=2)[:800]}")
-                
-                plugins = config.get("plugins", {})
-                
-                # plugins может быть dict или string в зависимости от версии Stash
-                if isinstance(plugins, dict):
-                    log(f"DEBUG: 'plugins' это dict, ключи: {list(plugins.keys())}")
-                    
-                    # Пробуем получить url_executor или url-executor (с дефисом!)
-                    url_executor = None
-                    for key in ["url-executor", "url_executor"]:
-                        if key in plugins:
-                            url_executor = plugins[key]
-                            log(f"DEBUG: Найден ключ '{key}' в plugins")
-                            break
-                    
-                    if url_executor and isinstance(url_executor, dict):
-                        url = url_executor.get("url", "").strip()
-                        if url:
-                            log(f"✓ URL получен через GraphQL (method 1): {url[:80]}...")
-                            return url
-                        else:
-                            log(f"DEBUG: URL пусто в {key}")
-                    else:
-                        log(f"DEBUG: url_executor не найден или не dict")
-                else:
-                    log(f"DEBUG: 'plugins' это не dict: {type(plugins)} = {str(plugins)[:200]}")
-                    # Если это строка, может быть JSON строкой
-                    try:
-                        plugins_parsed = json.loads(plugins) if isinstance(plugins, str) else plugins
-                        log(f"DEBUG: Распарсил plugins: {plugins_parsed}")
-                        if isinstance(plugins_parsed, dict) and "url_executor" in plugins_parsed:
-                            url_executor_data = plugins_parsed.get("url_executor", {})
-                            if isinstance(url_executor_data, dict):
-                                url = url_executor_data.get("url", "").strip()
-                                if url:
-                                    log(f"✓ URL получен через GraphQL (method 2): {url[:80]}...")
-                                    return url
-                    except Exception as parse_err:
-                        log(f"DEBUG: Не удалось распарсить plugins как JSON: {parse_err}")
-                
-                log(f"DEBUG: URL не найден в plugins структуре")
+        # Извлекаем URL из плагина
+        if "plugins" in config and "url-executor" in config["plugins"]:
+            plugin_config = config["plugins"]["url-executor"]
+            if isinstance(plugin_config, dict):
+                url = plugin_config.get("url", "").strip()
+                if url:
+                    log(f"✓ URL получен через StashAPI: {url[:80]}...")
             else:
-                log(f"DEBUG: 'data' НЕ найден в ответе")
-                errors = response_data.get("errors", [])
-                log(f"DEBUG: GraphQL ошибки: {errors}")
-                
-        except urllib.error.HTTPError as e:
-            error_response = e.read().decode('utf-8')
-            log(f"ERROR: HTTPError: код {e.code}")
-            log(f"ERROR: Response: {error_response[:500]}")
-            
-            # Пробуем распарсить JSON ошибку
-            try:
-                error_data = json.loads(error_response)
-                if error_data.get("errors"):
-                    for error in error_data.get("errors", []):
-                        log(f"ERROR: GraphQL error: {error}")
-            except:
-                pass
+                log(f"DEBUG: url-executor не dict: {type(plugin_config)}")
+        else:
+            available_plugins = list(config.get("plugins", {}).keys()) if config.get("plugins") else []
+            log(f"DEBUG: Доступные плагины: {available_plugins}")
             
     except Exception as e:
-        log(f"ERROR: Ошибка при запросе к GraphQL (outer): {e}")
+        log(f"DEBUG: StashAPI не сработала: {e}")
         import traceback
-        log(f"ERROR: Traceback: {traceback.format_exc()}")
-    
-    log("DEBUG: GraphQL метод не вернул URL")
-    return None
+        log(f"DEBUG: Traceback: {traceback.format_exc()}")
+
 
 # Пробуем получить URL различными способами
 try:
     # 1. Прямо из корня JSON
-    if "url" in json_input:
+    if not url and "url" in json_input:
         url = json_input.get("url", "").strip()
-        log(f"✓ URL найден в корне JSON: {url[:80] if url else 'пусто'}...")
+        if url:
+            log(f"✓ URL найден в корне JSON: {url[:80]}...")
     
     # 2. Из args (входные аргументы задачи)
-    if not url:
-        log("DEBUG: Способ 1 (корень JSON) не помог, проверяю args...")
-        if "args" in json_input and isinstance(json_input["args"], dict):
-            log(f"DEBUG: args содержит ключи: {list(json_input['args'].keys())}")
-            url = json_input["args"].get("url", "").strip()
-            if url:
-                log(f"✓ URL найден в args: {url[:80]}...")
-            else:
-                log("DEBUG: URL не найден в args")
-        else:
-            log(f"DEBUG: 'args' отсутствует или не dict: {type(json_input.get('args'))}")
+    if not url and "args" in json_input and isinstance(json_input["args"], dict):
+        url = json_input["args"].get("url", "").strip()
+        if url:
+            log(f"✓ URL найден в args: {url[:80]}...")
     
     # 3. Пробуем hookContext
-    if not url:
-        log("DEBUG: Способ 2 (args) не помог, проверяю hookContext...")
-        if "hookContext" in json_input:
-            hook = json_input.get("hookContext", {})
-            if isinstance(hook, dict):
-                log(f"DEBUG: hookContext содержит ключи: {list(hook.keys())}")
-                url = hook.get("url", "").strip()
-                if url:
-                    log(f"✓ URL найден в hookContext: {url[:80]}...")
-                else:
-                    log("DEBUG: URL не найден в hookContext")
-            else:
-                log(f"DEBUG: hookContext не dict: {type(hook)}")
-        else:
-            log("DEBUG: 'hookContext' отсутствует")
-    
-    # 4. Пробуем pluginSettings (стандартный способ передачи настроек в Stash)
-    if not url:
-        log("DEBUG: Способ 3 (hookContext) не помог, проверяю pluginSettings...")
-        if "pluginSettings" in json_input:
-            settings = json_input.get("pluginSettings", {})
-            if isinstance(settings, dict):
-                log(f"DEBUG: pluginSettings содержит ключи: {list(settings.keys())}")
-                url = settings.get("url", "").strip()
-                if url:
-                    log(f"✓ URL найден в pluginSettings: {url[:80]}...")
-                else:
-                    log("DEBUG: URL не найден в pluginSettings")
-            else:
-                log(f"DEBUG: pluginSettings не dict: {type(settings)}")
-        else:
-            log("DEBUG: 'pluginSettings' отсутствует")
-    
-    # 5. Получаем через GraphQL API (основной способ для Stash)
-    if not url:
-        log("DEBUG: Способ 4 (pluginSettings) не помог, пытаюсь GraphQL API...")
-        if "server_connection" in json_input:
-            log("DEBUG: 'server_connection' найден, вызываю get_plugin_settings_from_stash()...")
-            url = get_plugin_settings_from_stash(json_input)
+    if not url and "hookContext" in json_input:
+        hook = json_input.get("hookContext", {})
+        if isinstance(hook, dict):
+            url = hook.get("url", "").strip()
             if url:
-                log(f"✓ GraphQL успешно вернул URL: {url[:80]}...")
-            else:
-                log("DEBUG: GraphQL вернул None")
-        else:
-            log("DEBUG: 'server_connection' отсутствует в json_input")
+                log(f"✓ URL найден в hookContext: {url[:80]}...")
     
-    # 6. Читаем из конфига Stash (файл с настройками плагина)
-    if not url:
-        log("DEBUG: Способ 5 (GraphQL) не помог, проверяю config файлы...")
-        try:
-            script_dir = Path(__file__).parent
-            log(f"DEBUG: script_dir = {script_dir}")
-            config_paths = [
-                script_dir / "url_executor-settings.json",
-                script_dir / "settings.json",
-                script_dir / "config.json",
-                script_dir.parent / "url_executor-settings.json",
-            ]
-            
-            log(f"DEBUG: Проверяю {len(config_paths)} конфиг файлов...")
-            for config_path in config_paths:
-                log(f"DEBUG: Проверяю {config_path}...")
-                if config_path.exists():
-                    log(f"DEBUG: {config_path} существует, читаю...")
-                    try:
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config_data = json.load(f)
-                            if isinstance(config_data, dict):
-                                url = config_data.get("url", "").strip()
-                                if url:
-                                    log(f"✓ URL найден в {config_path}: {url[:80]}...")
-                                    break
-                                else:
-                                    log(f"DEBUG: URL пусто или отсутствует в {config_path}")
-                            else:
-                                log(f"DEBUG: config_data не dict: {type(config_data)}")
-                    except Exception as e:
-                        log(f"DEBUG: Ошибка при чтении {config_path}: {e}")
-                else:
-                    log(f"DEBUG: {config_path} НЕ существует")
-        except Exception as e:
-            log(f"DEBUG: Ошибка при поиске конфига: {e}")
-            import traceback
-            log(f"DEBUG: Traceback: {traceback.format_exc()}")
-    
-    # 7. Пробуем переменную окружения
-    if not url:
-        log("DEBUG: Способ 6 (config файлы) не помог, проверяю переменные окружения...")
-        try:
-            url = os.environ.get('STASH_PLUGIN_URL_EXECUTOR_URL', '').strip()
+    # 4. Пробуем pluginSettings
+    if not url and "pluginSettings" in json_input:
+        settings = json_input.get("pluginSettings", {})
+        if isinstance(settings, dict):
+            url = settings.get("url", "").strip()
             if url:
-                log(f"✓ URL найден в переменной окружения: {url[:80]}...")
-            else:
-                log("DEBUG: Переменная окружения пуста")
-        except Exception as e:
-            log(f"DEBUG: Ошибка при чтении переменной окружения: {e}")
+                log(f"✓ URL найден в pluginSettings: {url[:80]}...")
+    
+    # 5. Пробуем переменную окружения
+    if not url:
+        url = os.environ.get('STASH_PLUGIN_URL_EXECUTOR_URL', '').strip()
+        if url:
+            log(f"✓ URL найден в переменной окружения: {url[:80]}...")
     
     # Итоговая проверка
     if not url:
         log(f"=== КРИТИЧЕСКАЯ ОШИБКА ===")
-        log(f"Все 7 способов получения URL не сработали!")
         log(f"ERROR: URL не найден в конфигурации")
         log(f"СПРАВКА: Введите URL в настройках плагина в Stash")
         print("ERROR: URL not found. Please configure it in Stash plugin settings.", file=sys.stderr)
