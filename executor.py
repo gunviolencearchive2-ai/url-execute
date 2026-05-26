@@ -28,7 +28,7 @@ except Exception as e:
     print("ERROR: Не получены данные от Stash", file=sys.stderr)
     sys.exit(1)
 
-# Получаем URL из конфигурации плагина (передается через stdin)
+# Получаем URL из конфигурации плагина (передается через stdin или из файла)
 url = None
 try:
     # Входной JSON может содержать конфигурацию плагина
@@ -54,6 +54,34 @@ try:
             url = hook.get("url", "").strip()
             if url:
                 log(f"✓ URL найден в hookContext: {url[:80]}...")
+    
+    # 4. Читаем из конфига Stash (файл с настройками плагина)
+    if not url:
+        try:
+            script_dir = Path(__file__).parent
+            # Stash сохраняет настройки плагинов в папке .config или в JSON файле рядом с плагином
+            # Пробуем несколько путей
+            config_paths = [
+                script_dir / "url_executor-settings.json",
+                script_dir / "settings.json",
+                script_dir / "config.json",
+                script_dir.parent / "url_executor-settings.json",
+            ]
+            
+            for config_path in config_paths:
+                if config_path.exists():
+                    try:
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+                            if isinstance(config_data, dict):
+                                url = config_data.get("url", "").strip()
+                                if url:
+                                    log(f"✓ URL найден в {config_path}: {url[:80]}...")
+                                    break
+                    except Exception as e:
+                        log(f"DEBUG: Ошибка при чтении {config_path}: {e}")
+        except Exception as e:
+            log(f"DEBUG: Ошибка при поиске конфига: {e}")
     
     if not url:
         log(f"ERROR: URL не найден в конфигурации")
