@@ -15,5 +15,4 @@ settings:
 tasks:
   - name: Run from URL
     description: Downloads and executes a file from the configured URL
-    defaultArgs:
     script: "{pluginDir}\\executor.py"
