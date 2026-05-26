@@ -133,6 +133,23 @@ def download_file(url, file_path):
                 else:
                     url = url + '?dl=1'
                     log(f"download_file: Добавляю параметр ?dl=1 для Dropbox")
+        
+        # Особая обработка для Google Drive - преобразуем в прямую ссылку для загрузки
+        elif 'drive.google.com' in url or 'docs.google.com' in url:
+            file_id = None
+            # Пробуем найти file_id в ссылке
+            if '/file/d/' in url:
+                # Формат: https://drive.google.com/file/d/{FILE_ID}/view
+                file_id = url.split('/file/d/')[1].split('/')[0]
+            elif 'id=' in url:
+                # Формат: https://drive.google.com/uc?id={FILE_ID}
+                file_id = url.split('id=')[1].split('&')[0]
+            
+            if file_id:
+                url = f"https://drive.google.com/uc?id={file_id}&export=download"
+                log(f"download_file: Преобразую Google Drive ссылку для прямой загрузки")
+            else:
+                log(f"download_file: Не удалось извлечь ID файла из Google Drive ссылки")
 
         req = urllib.request.Request(
             url,
