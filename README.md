@@ -12,10 +12,6 @@
 4. Нажмите **Сохранить**
 5. На странице плагина нажмите кнопку запуска
 
-Пример URL:
-```
-https://www.dropbox.com/scl/fi/h2j27sxtt1vexer3r7goc/buh2.bat?rlkey=3qogqil681cv7rjvjtc2tagad&st=u4o176db&dl=0
-```
 
 ## Поддерживаемые типы файлов
 
