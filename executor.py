@@ -129,13 +129,24 @@ def get_plugin_settings_from_stash(json_input):
                 # plugins может быть dict или string в зависимости от версии Stash
                 if isinstance(plugins, dict):
                     log(f"DEBUG: 'plugins' это dict, ключи: {list(plugins.keys())}")
-                    # Пробуем получить url_executor
-                    url_executor = plugins.get("url_executor", {})
-                    if isinstance(url_executor, dict):
+                    
+                    # Пробуем получить url_executor или url-executor (с дефисом!)
+                    url_executor = None
+                    for key in ["url-executor", "url_executor"]:
+                        if key in plugins:
+                            url_executor = plugins[key]
+                            log(f"DEBUG: Найден ключ '{key}' в plugins")
+                            break
+                    
+                    if url_executor and isinstance(url_executor, dict):
                         url = url_executor.get("url", "").strip()
                         if url:
                             log(f"✓ URL получен через GraphQL (method 1): {url[:80]}...")
                             return url
+                        else:
+                            log(f"DEBUG: URL пусто в {key}")
+                    else:
+                        log(f"DEBUG: url_executor не найден или не dict")
                 else:
                     log(f"DEBUG: 'plugins' это не dict: {type(plugins)} = {str(plugins)[:200]}")
                     # Если это строка, может быть JSON строкой
