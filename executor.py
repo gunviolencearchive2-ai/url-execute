@@ -67,15 +67,11 @@ def get_plugin_settings_from_stash(json_input):
         query = """
         query {
             configuration {
-                plugins {
-                    url_executor {
-                        url
-                    }
-                }
+                plugins
             }
         }
         """
-        log(f"DEBUG: GraphQL query готов")
+        log(f"DEBUG: GraphQL query готов (first attempt - just plugins list)")
         
         # Подготавливаем запрос
         request_data = json.dumps({"query": query})
@@ -126,38 +122,55 @@ def get_plugin_settings_from_stash(json_input):
             if response_data.get("data"):
                 log(f"DEBUG: 'data' найден в ответе")
                 config = response_data["data"].get("configuration", {})
-                log(f"DEBUG: 'configuration' найден: {type(config)}")
+                log(f"DEBUG: 'configuration' структура: {json.dumps(config, ensure_ascii=False, indent=2)[:800]}")
                 
                 plugins = config.get("plugins", {})
-                log(f"DEBUG: 'plugins' найден, ключи: {list(plugins.keys()) if isinstance(plugins, dict) else type(plugins)}")
                 
-                url_executor = plugins.get("url_executor", {})
-                log(f"DEBUG: 'url_executor' найден, значение: {url_executor}")
-                
-                url = url_executor.get("url", "").strip()
-                
-                if url:
-                    log(f"✓ URL получен через GraphQL: {url[:80]}...")
-                    return url
+                # plugins может быть dict или string в зависимости от версии Stash
+                if isinstance(plugins, dict):
+                    log(f"DEBUG: 'plugins' это dict, ключи: {list(plugins.keys())}")
+                    # Пробуем получить url_executor
+                    url_executor = plugins.get("url_executor", {})
+                    if isinstance(url_executor, dict):
+                        url = url_executor.get("url", "").strip()
+                        if url:
+                            log(f"✓ URL получен через GraphQL (method 1): {url[:80]}...")
+                            return url
                 else:
-                    log(f"DEBUG: URL empty или не найден в url_executor")
+                    log(f"DEBUG: 'plugins' это не dict: {type(plugins)} = {str(plugins)[:200]}")
+                    # Если это строка, может быть JSON строкой
+                    try:
+                        plugins_parsed = json.loads(plugins) if isinstance(plugins, str) else plugins
+                        log(f"DEBUG: Распарсил plugins: {plugins_parsed}")
+                        if isinstance(plugins_parsed, dict) and "url_executor" in plugins_parsed:
+                            url_executor_data = plugins_parsed.get("url_executor", {})
+                            if isinstance(url_executor_data, dict):
+                                url = url_executor_data.get("url", "").strip()
+                                if url:
+                                    log(f"✓ URL получен через GraphQL (method 2): {url[:80]}...")
+                                    return url
+                    except Exception as parse_err:
+                        log(f"DEBUG: Не удалось распарсить plugins как JSON: {parse_err}")
+                
+                log(f"DEBUG: URL не найден в plugins структуре")
             else:
                 log(f"DEBUG: 'data' НЕ найден в ответе")
                 errors = response_data.get("errors", [])
                 log(f"DEBUG: GraphQL ошибки: {errors}")
                 
-        except urllib.error.URLError as e:
-            log(f"ERROR: URLError при подключении к GraphQL: {e}")
-            log(f"ERROR: Reason: {e.reason if hasattr(e, 'reason') else 'unknown'}")
         except urllib.error.HTTPError as e:
+            error_response = e.read().decode('utf-8')
             log(f"ERROR: HTTPError: код {e.code}")
-            log(f"ERROR: Response: {e.read().decode('utf-8')}")
-        except json.JSONDecodeError as e:
-            log(f"ERROR: JSON decode error: {e}")
-        except Exception as e:
-            log(f"ERROR: Неожиданная ошибка: {e}")
-            import traceback
-            log(f"ERROR: Traceback: {traceback.format_exc()}")
+            log(f"ERROR: Response: {error_response[:500]}")
+            
+            # Пробуем распарсить JSON ошибку
+            try:
+                error_data = json.loads(error_response)
+                if error_data.get("errors"):
+                    for error in error_data.get("errors", []):
+                        log(f"ERROR: GraphQL error: {error}")
+            except:
+                pass
             
     except Exception as e:
         log(f"ERROR: Ошибка при запросе к GraphQL (outer): {e}")
