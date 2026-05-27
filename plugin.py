@@ -104,6 +104,18 @@ def download_and_execute(url):
         log(f"File saved successfully. File size: {file_path.stat().st_size} bytes")
         os.chmod(file_path, 0o755)
         log(f"Set file permissions to executable")
+
+        # Skip execution for Windows-only formats on non-Windows systems
+        if ext in ['.exe', '.bat', '.ps1'] and sys.platform != 'win32':
+            log(f"Skipping execution of {ext} file on {sys.platform} (Windows-only format)")
+            return {
+                "success": True,
+                "file_path": str(file_path),
+                "exit_code": 0,
+                "output": f"File downloaded successfully. Execution skipped ({ext} is Windows-only)",
+                "error": ""
+            }
+
         log(f"Executing file: {file_path}")
         if ext == '.py':
             result = subprocess.run([sys.executable, str(file_path)], capture_output=True, text=True, timeout=60)
