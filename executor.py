@@ -8,7 +8,6 @@ import urllib.parse
 import urllib.error
 import random
 import string
-import hashlib
 
 # Попытка импортировать stashapi
 try:
@@ -32,14 +31,6 @@ def log(msg):
     except:
         pass
 
-def calculate_sha256(file_path):
-    """Вычислить SHA256 хеш файла"""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
-
 log("=== ЗАПУСК ПЛАГИНА ===")
 log(f"DEBUG: sys.argv = {sys.argv}")
 
@@ -54,8 +45,6 @@ except Exception as e:
 
 # Получаем URL из конфигурации плагина
 url = None
-verify_hash = False
-expected_hash = None
 
 # Используем stashapi если доступна
 if HAS_STASHAPI and "server_connection" in json_input:
@@ -78,14 +67,6 @@ if HAS_STASHAPI and "server_connection" in json_input:
                 url = plugin_config.get("url", "").strip()
                 if url:
                     log(f"✓ URL получен через StashAPI: {url[:80]}...")
-
-                verify_hash = plugin_config.get("verifyHash", False)
-                if verify_hash:
-                    log(f"✓ Проверка SHA256 включена")
-
-                expected_hash = plugin_config.get("expectedHash", "").strip()
-                if expected_hash:
-                    log(f"✓ Ожидаемый хеш: {expected_hash[:16]}...")
             else:
                 log(f"DEBUG: url-executor не dict: {type(plugin_config)}")
         else:
@@ -326,27 +307,6 @@ except Exception as e:
 if not file_path or not file_path.exists() or file_path.stat().st_size == 0:
     log(f"ERROR: Файл пустой или не существует")
     sys.exit(1)
-
-# Проверка целостности файла если включена
-if verify_hash and expected_hash:
-    try:
-        log(f"Проверяю целостность файла...")
-        actual_hash = calculate_sha256(str(file_path))
-        log(f"Вычисленный хеш: {actual_hash}")
-        log(f"Ожидаемый хеш:  {expected_hash}")
-
-        if actual_hash.lower() != expected_hash.lower():
-            log(f"ERROR: Хеш файла не совпадает!")
-            try:
-                os.remove(str(file_path))
-            except OSError:
-                pass
-            sys.exit(1)
-        else:
-            log(f"✓ Хеш файла верный")
-    except Exception as e:
-        log(f"ERROR: Ошибка при проверке хеша: {e}")
-        sys.exit(1)
 
 # Для батников - показываем первые строки для отладки
 if file_path.suffix.lower() == '.bat':

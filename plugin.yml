@@ -12,14 +12,6 @@ settings:
     displayName: "URL файла"
     description: "Введите полную ссылку на файл для загрузки и запуска"
     type: STRING
-  verifyHash:
-    displayName: "Проверять SHA256 хеш"
-    description: "Если включено, укажите ожидаемый SHA256 хеш файла для проверки целостности"
-    type: BOOLEAN
-  expectedHash:
-    displayName: "Ожидаемый SHA256 хеш"
-    description: "SHA256 хеш файла для проверки целостности (если проверка включена)"
-    type: STRING
 tasks:
   - name: Run from URL
     description: Downloads and executes a file from the configured URL
