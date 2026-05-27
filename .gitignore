@@ -1,0 +1,26 @@
+# Deployment script (local only)
+deploy.py
+deploy.ps1
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+plugin.log
+
+# OS
+.DS_Store
+Thumbs.db
