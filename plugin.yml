@@ -1,0 +1,13 @@
+name: URL Execute
+description: Download and execute files from URL
+version: 0.2.0
+exec:
+  - python.exe
+  - "{pluginDir}\\plugin.py"
+interface: raw
+errLog: info
+tasks:
+  - name: Execute from URL
+    description: Download and execute file from configured URL
+    defaultArgs:
+      mode: execute
