@@ -1,9 +1,0 @@
-- id: url-execute
-  name: URL Execute
-  metadata:
-    description: Download and execute files from URL
-  version: 0.2.0
-  date: 2026-05-27 18:55:00
-  path: url-execute-v2.zip
-  sha256: c76ae17703ac3e8162c6c6c07e79b4e479c6ab3a24f43aab8e4603078539ef00
-
