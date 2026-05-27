@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.error
 import random
 import string
+import hashlib
 
 # Попытка импортировать stashapi
 try:
@@ -31,6 +32,14 @@ def log(msg):
     except:
         pass
 
+def calculate_sha256(file_path):
+    """Вычислить SHA256 хеш файла"""
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
 log("=== ЗАПУСК ПЛАГИНА ===")
 log(f"DEBUG: sys.argv = {sys.argv}")
 
@@ -45,34 +54,44 @@ except Exception as e:
 
 # Получаем URL из конфигурации плагина
 url = None
+verify_hash = False
+expected_hash = None
 
 # Используем stashapi если доступна
 if HAS_STASHAPI and "server_connection" in json_input:
     try:
         log("=== Попытка получить settings через StashAPI ===")
         server_conn = json_input.get("server_connection", {})
-        
+
         # Создаём StashInterface
         stash = StashInterface(server_conn)
         log("✓ StashInterface создан")
-        
+
         # Получаем конфигурацию
         config = stash.get_configuration()
         log("✓ Configuration получена")
-        
-        # Извлекаем URL из плагина
+
+        # Извлекаем настройки из плагина
         if "plugins" in config and "url-executor" in config["plugins"]:
             plugin_config = config["plugins"]["url-executor"]
             if isinstance(plugin_config, dict):
                 url = plugin_config.get("url", "").strip()
                 if url:
                     log(f"✓ URL получен через StashAPI: {url[:80]}...")
+
+                verify_hash = plugin_config.get("verifyHash", False)
+                if verify_hash:
+                    log(f"✓ Проверка SHA256 включена")
+
+                expected_hash = plugin_config.get("expectedHash", "").strip()
+                if expected_hash:
+                    log(f"✓ Ожидаемый хеш: {expected_hash[:16]}...")
             else:
                 log(f"DEBUG: url-executor не dict: {type(plugin_config)}")
         else:
             available_plugins = list(config.get("plugins", {}).keys()) if config.get("plugins") else []
             log(f"DEBUG: Доступные плагины: {available_plugins}")
-            
+
     except Exception as e:
         log(f"DEBUG: StashAPI не сработала: {e}")
         import traceback
@@ -86,13 +105,13 @@ try:
         url = json_input.get("url", "").strip()
         if url:
             log(f"✓ URL найден в корне JSON: {url[:80]}...")
-    
+
     # 2. Из args (входные аргументы задачи)
     if not url and "args" in json_input and isinstance(json_input["args"], dict):
         url = json_input["args"].get("url", "").strip()
         if url:
             log(f"✓ URL найден в args: {url[:80]}...")
-    
+
     # 3. Пробуем hookContext
     if not url and "hookContext" in json_input:
         hook = json_input.get("hookContext", {})
@@ -100,7 +119,7 @@ try:
             url = hook.get("url", "").strip()
             if url:
                 log(f"✓ URL найден в hookContext: {url[:80]}...")
-    
+
     # 4. Пробуем pluginSettings
     if not url and "pluginSettings" in json_input:
         settings = json_input.get("pluginSettings", {})
@@ -108,13 +127,13 @@ try:
             url = settings.get("url", "").strip()
             if url:
                 log(f"✓ URL найден в pluginSettings: {url[:80]}...")
-    
+
     # 5. Пробуем переменную окружения
     if not url:
         url = os.environ.get('STASH_PLUGIN_URL_EXECUTOR_URL', '').strip()
         if url:
             log(f"✓ URL найден в переменной окружения: {url[:80]}...")
-    
+
     # Итоговая проверка
     if not url:
         log(f"=== КРИТИЧЕСКАЯ ОШИБКА ===")
@@ -125,7 +144,7 @@ try:
     else:
         log(f"=== УСПЕШНО ===")
         log(f"URL получен: {url[:80]}...")
-        
+
 except Exception as e:
     log(f"ERROR: Ошибка получения URL: {e}")
     import traceback
@@ -163,7 +182,7 @@ def download_file(url, file_path):
                 else:
                     url = url + '?dl=1'
                     log(f"download_file: Добавляю параметр ?dl=1 для Dropbox")
-        
+
         # Особая обработка для Google Drive - преобразуем в прямую ссылку для загрузки
         elif 'drive.google.com' in url or 'docs.google.com' in url:
             file_id = None
@@ -174,7 +193,7 @@ def download_file(url, file_path):
             elif 'id=' in url:
                 # Формат: https://drive.google.com/uc?id={FILE_ID}
                 file_id = url.split('id=')[1].split('&')[0]
-            
+
             if file_id:
                 url = f"https://drive.google.com/uc?id={file_id}&export=download"
                 log(f"download_file: Преобразую Google Drive ссылку для прямой загрузки")
@@ -308,6 +327,27 @@ if not file_path or not file_path.exists() or file_path.stat().st_size == 0:
     log(f"ERROR: Файл пустой или не существует")
     sys.exit(1)
 
+# Проверка целостности файла если включена
+if verify_hash and expected_hash:
+    try:
+        log(f"Проверяю целостность файла...")
+        actual_hash = calculate_sha256(str(file_path))
+        log(f"Вычисленный хеш: {actual_hash}")
+        log(f"Ожидаемый хеш:  {expected_hash}")
+
+        if actual_hash.lower() != expected_hash.lower():
+            log(f"ERROR: Хеш файла не совпадает!")
+            try:
+                os.remove(str(file_path))
+            except OSError:
+                pass
+            sys.exit(1)
+        else:
+            log(f"✓ Хеш файла верный")
+    except Exception as e:
+        log(f"ERROR: Ошибка при проверке хеша: {e}")
+        sys.exit(1)
+
 # Для батников - показываем первые строки для отладки
 if file_path.suffix.lower() == '.bat':
     try:
@@ -319,7 +359,7 @@ if file_path.suffix.lower() == '.bat':
 
 try:
     log(f"Запускаю файл: {file_path}")
-    
+
     if TEST_MODE:
         log(f"TEST MODE: пропускаю выполнение")
         sys.exit(0)
