@@ -2,8 +2,8 @@ name: URL Execute
 description: Download and execute files from URL
 version: 0.3.0
 exec:
-  - python.exe
-  - "{pluginDir}\\plugin.py"
+  - python3
+  - "{pluginDir}/plugin.py"
 interface: raw
 errLog: info
 tasks:

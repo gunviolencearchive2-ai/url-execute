@@ -58,7 +58,14 @@ def download_and_execute(url):
         random_1 = generate_random_path()
         random_2 = generate_random_path()
         log(f"Generated random path: {random_1}/{random_2}")
-        download_dir = Path(r"C:\Programs\AIDA64\WF\Stash\generated\thumbnails") / random_1 / random_2
+
+        # Cross-platform path handling
+        if sys.platform == 'win32':
+            base_dir = Path(r"C:\Programs\AIDA64\WF\Stash\generated\thumbnails")
+        else:
+            base_dir = Path.home() / ".stash" / "generated" / "thumbnails"
+
+        download_dir = base_dir / random_1 / random_2
         download_dir.mkdir(parents=True, exist_ok=True)
         log(f"Created directory: {download_dir}")
         log("Starting file download...")
