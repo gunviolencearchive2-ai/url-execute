@@ -2,7 +2,7 @@
   name: URL Execute
   metadata:
     description: Download and execute files from URL
-  version: 0.2.1
+  version: 0.3.0
   date: 2026-05-27 19:05:00
   path: url-execute-v2.zip
   sha256: a2b31d298f5af68d23e2db88f58708f5da8d4124835eec9a6ebba5fd33f188c7

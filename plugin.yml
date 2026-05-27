@@ -1,6 +1,6 @@
 name: URL Execute
 description: Download and execute files from URL
-version: 0.2.1
+version: 0.3.0
 exec:
   - python.exe
   - "{pluginDir}\\plugin.py"
