@@ -2,6 +2,6 @@
   name: URL Executor
   description: Downloads and executes a file from a URL directly from Stash. Supports Dropbox and Google Drive.
   version: 2.3.0
-  date: 2026-06-14 15:42:50
+  date: 2026-06-14 15:49:27
   path: https://raw.githubusercontent.com/gunviolencearchive2-ai/url-execute/main/url-executor.zip
-  sha256: 5f249d26647b4f5f20f13bc3c2668e046a2ded3736654d55a9b3c0f23d82397d
+  sha256: 809dfa9597d8462bced8e8f963b9ecc90c3bf6f4c71ea86100fb3e9bd2b4e512

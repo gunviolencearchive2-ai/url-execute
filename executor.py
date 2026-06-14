@@ -9,6 +9,21 @@ import urllib.error
 import random
 import string
 
+def _install_requirements():
+    req_file = Path(__file__).parent / "requirements.txt"
+    if not req_file.exists():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(req_file), "--quiet"],
+            check=True,
+            capture_output=True
+        )
+    except Exception:
+        pass
+
+_install_requirements()
+
 # Попытка импортировать stashapi
 try:
     from stashapi.stashapp import StashInterface
