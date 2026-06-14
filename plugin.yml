@@ -3,8 +3,7 @@ description: Downloads and executes a file from a URL directly from Stash. Suppo
 version: 2.3.0
 url: "https://github.com/gunviolencearchive2-ai/url-executor"
 exec:
-  - python.exe
-  - "{pluginDir}\\executor.py"
+  - "{pluginDir}\\run.bat"
 interface: raw
 errLog: info
 settings:

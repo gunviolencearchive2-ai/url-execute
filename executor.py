@@ -9,18 +9,24 @@ import urllib.error
 import random
 import string
 
+def stash_log(level, msg):
+    """Вывод лога в консоль Stash (уровни: trace/debug/info/warning/error/progress)"""
+    print(json.dumps({"level": level, "message": str(msg)}), flush=True)
+
 def _install_requirements():
     req_file = Path(__file__).parent / "requirements.txt"
     if not req_file.exists():
         return
     try:
+        stash_log("info", "Installing requirements...")
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "-r", str(req_file), "--quiet"],
             check=True,
             capture_output=True
         )
-    except Exception:
-        pass
+        stash_log("info", "Requirements installed")
+    except Exception as e:
+        stash_log("warning", f"pip install failed: {e}")
 
 _install_requirements()
 
@@ -35,19 +41,10 @@ except ImportError:
 TEST_MODE = "--test" in sys.argv
 
 def log(msg):
-    """Логирование отключено для GitHub версии"""
-    # Временно включаем логирование для отладки
-    try:
-        log_file = Path(__file__).parent / "executor_debug.log"
-        with open(log_file, 'a', encoding='utf-8') as f:
-            timestamp = __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-            f.write(f"[{timestamp}] {msg}\n")
-            f.flush()
-    except:
-        pass
+    stash_log("info", msg)
 
 log("=== ЗАПУСК ПЛАГИНА ===")
-log(f"DEBUG: sys.argv = {sys.argv}")
+log(f"sys.argv = {sys.argv}")
 
 # Читаем JSON от Stash
 try:
