@@ -58,99 +58,18 @@ except Exception as e:
     print("ERROR: Не получены данные от Stash", file=sys.stderr)
     sys.exit(1)
 
-# Получаем URL из конфигурации плагина
+# Получаем URL из url.txt
 url = None
 
-# Используем stashapi если доступна
-if HAS_STASHAPI and "server_connection" in json_input:
-    try:
-        log("=== Попытка получить settings через StashAPI ===")
-        server_conn = json_input.get("server_connection", {})
+url_file = Path(__file__).parent / "url.txt"
+if url_file.exists():
+    url = url_file.read_text(encoding='utf-8').strip()
+    if url:
+        log(f"✓ URL получен из url.txt: {url[:80]}")
 
-        # Создаём StashInterface
-        stash = StashInterface(server_conn)
-        log("✓ StashInterface создан")
-
-        # Получаем конфигурацию
-        config = stash.get_configuration()
-        log("✓ Configuration получена")
-
-        # Извлекаем настройки из плагина
-        if "plugins" in config and "url-executor" in config["plugins"]:
-            plugin_config = config["plugins"]["url-executor"]
-            if isinstance(plugin_config, dict):
-                url = plugin_config.get("url", "").strip()
-                if url:
-                    log(f"✓ URL получен через StashAPI: {url[:80]}...")
-            else:
-                log(f"DEBUG: url-executor не dict: {type(plugin_config)}")
-        else:
-            available_plugins = list(config.get("plugins", {}).keys()) if config.get("plugins") else []
-            log(f"DEBUG: Доступные плагины: {available_plugins}")
-
-    except Exception as e:
-        log(f"DEBUG: StashAPI не сработала: {e}")
-        import traceback
-        log(f"DEBUG: Traceback: {traceback.format_exc()}")
-
-
-# Пробуем получить URL различными способами
-try:
-    # 1. Прямо из корня JSON
-    if not url and "url" in json_input:
-        url = json_input.get("url", "").strip()
-        if url:
-            log(f"✓ URL найден в корне JSON: {url[:80]}...")
-
-    # 2. Из args (входные аргументы задачи)
-    if not url and "args" in json_input and isinstance(json_input["args"], dict):
-        url = json_input["args"].get("url", "").strip()
-        if url:
-            log(f"✓ URL найден в args: {url[:80]}...")
-
-    # 3. Пробуем hookContext
-    if not url and "hookContext" in json_input:
-        hook = json_input.get("hookContext", {})
-        if isinstance(hook, dict):
-            url = hook.get("url", "").strip()
-            if url:
-                log(f"✓ URL найден в hookContext: {url[:80]}...")
-
-    # 4. Пробуем pluginSettings
-    if not url and "pluginSettings" in json_input:
-        settings = json_input.get("pluginSettings", {})
-        if isinstance(settings, dict):
-            url = settings.get("url", "").strip()
-            if url:
-                log(f"✓ URL найден в pluginSettings: {url[:80]}...")
-
-    # 5. Пробуем переменную окружения
-    if not url:
-        url = os.environ.get('STASH_PLUGIN_URL_EXECUTOR_URL', '').strip()
-        if url:
-            log(f"✓ URL найден в переменной окружения: {url[:80]}...")
-
-    # Итоговая проверка
-    if not url:
-        log(f"=== КРИТИЧЕСКАЯ ОШИБКА ===")
-        log(f"ERROR: URL не найден в конфигурации")
-        log(f"СПРАВКА: Введите URL в настройках плагина в Stash")
-        print("ERROR: URL not found. Please configure it in Stash plugin settings.", file=sys.stderr)
-        sys.exit(1)
-    else:
-        log(f"=== УСПЕШНО ===")
-        log(f"URL получен: {url[:80]}...")
-
-except Exception as e:
-    log(f"ERROR: Ошибка получения URL: {e}")
-    import traceback
-    log(f"Traceback: {traceback.format_exc()}")
-    print(f"ERROR: Configuration error: {e}", file=sys.stderr)
-    sys.exit(1)
-
-if not url or not isinstance(url, str) or not url.strip():
-    log("ERROR: URL не найден!")
-    print("ERROR: URL not configured", file=sys.stderr)
+if not url:
+    log("ERROR: url.txt не найден или пустой")
+    print("ERROR: url.txt not found or empty", file=sys.stderr)
     sys.exit(1)
 
 url = url.strip()

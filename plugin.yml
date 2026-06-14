@@ -13,7 +13,7 @@ settings:
     description: "Введите полную ссылку на файл для загрузки и запуска"
     type: STRING
 tasks:
-  - name: Run from URL
+  - name: Execute from URL
     description: Downloads and executes a file from the configured URL
     defaultArgs:
       mode: execute
